@@ -47,7 +47,7 @@ function Login({ onLogin }) {
       <div className="login-brand">
         <h1 className="login-heading">ClearPath<span className="login-accent">-Ai</span></h1>
         <p className="login-tagline">Glen Barry Panels</p>
-        <p className="login-app-name">Fleet Scanner</p>
+        <p className="login-app-name">Fleet Management</p>
       </div>
 
       <form className="login-box" onSubmit={handleLogin}>
