@@ -45,8 +45,8 @@ function Login({ onLogin }) {
   return (
     <div className="login-container">
       <div className="login-brand">
-        <p className="login-clearpath">ClearPath-Ai</p>
-        <h1 className="login-client-name">Glen Barry Panels</h1>
+        <h1 className="login-heading">ClearPath<span className="login-accent">-Ai</span></h1>
+        <p className="login-tagline">Glen Barry Panels</p>
         <p className="login-app-name">Fleet Scanner</p>
       </div>
 
