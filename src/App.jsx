@@ -22,24 +22,29 @@ function Login({ onLogin }) {
     e.preventDefault()
     setError('')
 
-    const { data, error: dbError } = await supabase
-      .from('authorized_users')
-      .select('email, role, clients(name)')
-      .eq('email', email.trim())
-      .eq('password', password)
-      .single()
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    })
 
-    if (dbError || !data) {
+    if (authError || !authData.user) {
       setError('Invalid email or password.')
       return
     }
 
-    if (data.role !== 'scan') {
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('role, client_id')
+      .eq('id', authData.user.id)
+      .single()
+
+    if (!profile || profile.role !== 'scan') {
+      await supabase.auth.signOut()
       setError('Access denied.')
       return
     }
 
-    onLogin({ email: data.email, clientName: data.clients?.name })
+    onLogin({ email: authData.user.email, clientName: 'Glen Barry Panels' })
   }
 
   return (
