@@ -119,6 +119,13 @@ body {
   font-size: 0.7rem;
   font-weight: 300;
   letter-spacing: 0.08em;
+  line-height: 1.6;
+}
+
+.login-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
 /* ── Scan app ── */

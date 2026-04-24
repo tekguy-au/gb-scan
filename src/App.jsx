@@ -70,8 +70,10 @@ function Login({ onLogin }) {
         <button className="login-btn" type="submit">Login</button>
       </form>
 
-      <p className="login-powered">Online Systems &copy;2026</p>
-      <p className="login-powered">Powered by ClearPath-Ai</p>
+      <div className="login-footer">
+        <p className="login-powered">Online Systems &copy;2026</p>
+        <p className="login-powered">Powered by ClearPath-Ai</p>
+      </div>
     </div>
   )
 }
