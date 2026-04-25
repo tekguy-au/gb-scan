@@ -280,6 +280,110 @@ function ScanCheckFlow({ action, onBack, recentScans, onRecord }) {
 
 // ── Add Client flow ───────────────────────────────────────────────────────────
 
+function dataURLtoBlob(dataURL) {
+  const [header, data] = dataURL.split(',')
+  const mime = header.match(/:(.*?);/)[1]
+  const binary = atob(data)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return new Blob([bytes], { type: mime })
+}
+
+function LicenceProgress({ frontDone, backDone }) {
+  return (
+    <div className="licence-progress">
+      <span className={`lp-step ${frontDone ? 'lp-done' : 'lp-pending'}`}>
+        {frontDone ? '✓' : '○'} Front
+      </span>
+      <span className="lp-divider">·</span>
+      <span className={`lp-step ${backDone ? 'lp-done' : 'lp-pending'}`}>
+        {backDone ? '✓' : '○'} Back
+      </span>
+    </div>
+  )
+}
+
+function LicenceCamera({ title, frontDone, backDone, onCapture, onBack }) {
+  const videoRef  = useRef(null)
+  const canvasRef = useRef(null)
+  const streamRef = useRef(null)
+  const [ready, setReady]       = useState(false)
+  const [preview, setPreview]   = useState(null)
+  const [camError, setCamError] = useState('')
+
+  function startStream() {
+    setReady(false)
+    setCamError('')
+    navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 } }
+    }).then(stream => {
+      streamRef.current = stream
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        videoRef.current.onloadedmetadata = () => setReady(true)
+      }
+    }).catch(() => setCamError('Camera not available — please allow camera access.'))
+  }
+
+  function stopStream() {
+    streamRef.current?.getTracks().forEach(t => t.stop())
+  }
+
+  useEffect(() => {
+    startStream()
+    return stopStream
+  }, [])
+
+  function capture() {
+    const video  = videoRef.current
+    const canvas = canvasRef.current
+    canvas.width  = video.videoWidth
+    canvas.height = video.videoHeight
+    canvas.getContext('2d').drawImage(video, 0, 0)
+    setPreview(canvas.toDataURL('image/jpeg', 0.85))
+    stopStream()
+  }
+
+  function retake() {
+    setPreview(null)
+    startStream()
+  }
+
+  if (preview) {
+    return (
+      <div className="scan-action">
+        <h2 className="scan-action-title">{title}</h2>
+        <LicenceProgress frontDone={frontDone} backDone={backDone} />
+        <img src={preview} alt="Captured licence" className="vin-preview" style={{ maxHeight: '200px' }} />
+        <button className="scan-submit scan-submit--vin" onClick={retake}>Retake</button>
+        <button className="scan-submit scan-submit--client" onClick={() => onCapture(preview)}>Use This Photo</button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="scan-action">
+      <button className="scan-back" onClick={() => { stopStream(); onBack() }}>← Back</button>
+      <h2 className="scan-action-title">{title}</h2>
+      <LicenceProgress frontDone={frontDone} backDone={backDone} />
+      {camError
+        ? <p className="scan-feedback scan-feedback--error">{camError}</p>
+        : (
+          <div className="camera-viewfinder">
+            <video ref={videoRef} autoPlay playsInline muted />
+            <div className="licence-guide" />
+            <canvas ref={canvasRef} style={{ display: 'none' }} />
+          </div>
+        )
+      }
+      <p className="vin-instruction">Align the licence inside the box</p>
+      <button className="scan-submit scan-submit--client" onClick={capture} disabled={!ready}>
+        Capture
+      </button>
+    </div>
+  )
+}
+
 const CLIENT_FIELDS = [
   { name: 'first_name',      label: 'First Name',          type: 'text',     cap: 'words'      },
   { name: 'last_name',       label: 'Last Name',           type: 'text',     cap: 'words'      },
@@ -289,61 +393,37 @@ const CLIENT_FIELDS = [
 ]
 
 function AddClient({ onBack }) {
-  const [phase, setPhase]           = useState('form') // 'form' | 'front' | 'back' | 'saving' | 'done'
-  const [form, setForm]             = useState({ first_name: '', last_name: '', date_of_birth: '', address: '', licence_number: '' })
-  const [frontFile, setFrontFile]   = useState(null)
-  const [backFile, setBackFile]     = useState(null)
+  const [phase, setPhase]               = useState('form') // 'form' | 'front' | 'back' | 'confirm' | 'saving' | 'done'
+  const [form, setForm]                 = useState({ first_name: '', last_name: '', date_of_birth: '', address: '', licence_number: '' })
   const [frontPreview, setFrontPreview] = useState(null)
   const [backPreview, setBackPreview]   = useState(null)
-  const [error, setError]           = useState('')
-  const frontRef                    = useRef(null)
-  const backRef                     = useRef(null)
+  const [error, setError]               = useState('')
 
   function handleChange(e) {
     const { name, value } = e.target
     setForm(prev => ({ ...prev, [name]: name === 'licence_number' ? value.toUpperCase() : value }))
   }
 
-  function handleFrontTaken(e) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setFrontFile(file)
-    const reader = new FileReader()
-    reader.onload = ev => setFrontPreview(ev.target.result)
-    reader.readAsDataURL(file)
-  }
-
-  function handleBackTaken(e) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setBackFile(file)
-    const reader = new FileReader()
-    reader.onload = ev => setBackPreview(ev.target.result)
-    reader.readAsDataURL(file)
-  }
-
   async function handleSave() {
     setError('')
     setPhase('saving')
-
     const licNo = form.licence_number.trim().toUpperCase()
-
     try {
       let frontPath = null
       let backPath  = null
 
-      if (frontFile) {
+      if (frontPreview) {
         const { error: upErr } = await supabase.storage
           .from('licence-images')
-          .upload(`${licNo}/front.jpg`, frontFile, { upsert: true })
+          .upload(`${licNo}/front.jpg`, dataURLtoBlob(frontPreview), { upsert: true, contentType: 'image/jpeg' })
         if (upErr) throw upErr
         frontPath = `${licNo}/front.jpg`
       }
 
-      if (backFile) {
+      if (backPreview) {
         const { error: upErr } = await supabase.storage
           .from('licence-images')
-          .upload(`${licNo}/back.jpg`, backFile, { upsert: true })
+          .upload(`${licNo}/back.jpg`, dataURLtoBlob(backPreview), { upsert: true, contentType: 'image/jpeg' })
         if (upErr) throw upErr
         backPath = `${licNo}/back.jpg`
       }
@@ -364,7 +444,7 @@ function AddClient({ onBack }) {
       setPhase('done')
     } catch (err) {
       setError(err.message || 'Failed to save — try again.')
-      setPhase('back')
+      setPhase('confirm')
     }
   }
 
@@ -385,100 +465,82 @@ function AddClient({ onBack }) {
     )
   }
 
-  if (phase === 'form') {
-    const canProceed = form.first_name.trim() && form.last_name.trim() && form.licence_number.trim()
-    return (
-      <div className="scan-action">
-        <button className="scan-back" onClick={onBack}>← Back</button>
-        <h2 className="scan-action-title">Add Client</h2>
-
-        {CLIENT_FIELDS.map(f => (
-          <div key={f.name} style={{ width: '100%' }}>
-            <p className="scan-label">{f.label}</p>
-            <input
-              className="scan-input client-input"
-              type={f.type}
-              name={f.name}
-              value={form[f.name]}
-              onChange={handleChange}
-              autoCapitalize={f.cap}
-              autoComplete="off"
-              spellCheck={false}
-            />
-          </div>
-        ))}
-
-        <button
-          className="scan-submit scan-submit--client"
-          onClick={() => setPhase('front')}
-          disabled={!canProceed}
-          style={{ marginTop: '0.5rem' }}
-        >
-          Next — Scan Licence
-        </button>
-      </div>
-    )
-  }
-
   if (phase === 'front') {
     return (
+      <LicenceCamera
+        title="Licence — Front"
+        frontDone={!!frontPreview}
+        backDone={!!backPreview}
+        onBack={() => setPhase('form')}
+        onCapture={dataURL => { setFrontPreview(dataURL); setPhase('back') }}
+      />
+    )
+  }
+
+  if (phase === 'back') {
+    return (
+      <LicenceCamera
+        title="Licence — Back"
+        frontDone={!!frontPreview}
+        backDone={!!backPreview}
+        onBack={() => setPhase('front')}
+        onCapture={dataURL => { setBackPreview(dataURL); setPhase('confirm') }}
+      />
+    )
+  }
+
+  if (phase === 'confirm') {
+    return (
       <div className="scan-action">
-        <button className="scan-back" onClick={() => setPhase('form')}>← Back</button>
-        <h2 className="scan-action-title">Licence — Front</h2>
-        <p className="vin-instruction">Take a photo of the front of the licence.</p>
-
-        {frontPreview && <img src={frontPreview} alt="Licence front" className="vin-preview" />}
-
-        <input
-          ref={frontRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          style={{ display: 'none' }}
-          onChange={handleFrontTaken}
-        />
-        <button className="scan-submit scan-submit--vin" onClick={() => frontRef.current.click()}>
-          {frontPreview ? 'Retake' : 'Open Camera'}
+        <button className="scan-back" onClick={() => setPhase('back')}>← Retake Back</button>
+        <h2 className="scan-action-title">Confirm Scans</h2>
+        <LicenceProgress frontDone={!!frontPreview} backDone={!!backPreview} />
+        <div style={{ display: 'flex', gap: '0.75rem', width: '100%' }}>
+          {frontPreview && <img src={frontPreview} alt="Front" className="vin-preview" style={{ flex: 1, maxHeight: '120px' }} />}
+          {backPreview  && <img src={backPreview}  alt="Back"  className="vin-preview" style={{ flex: 1, maxHeight: '120px' }} />}
+        </div>
+        {error && <p className="scan-feedback scan-feedback--error">{error}</p>}
+        <button
+          className="scan-submit scan-submit--client"
+          onClick={handleSave}
+          disabled={!frontPreview || !backPreview}
+        >
+          Save Client
         </button>
-
-        {frontPreview && (
-          <button className="scan-submit scan-submit--client" onClick={() => setPhase('back')}>
-            Next — Back of Licence
-          </button>
-        )}
       </div>
     )
   }
 
-  // phase === 'back'
+  // phase === 'form'
+  const canProceed = form.first_name.trim() && form.last_name.trim() && form.licence_number.trim()
   return (
     <div className="scan-action">
-      <button className="scan-back" onClick={() => setPhase('front')}>← Back</button>
-      <h2 className="scan-action-title">Licence — Back</h2>
-      <p className="vin-instruction">Take a photo of the back of the licence.</p>
+      <button className="scan-back" onClick={onBack}>← Back</button>
+      <h2 className="scan-action-title">Add Client</h2>
 
-      {backPreview && <img src={backPreview} alt="Licence back" className="vin-preview" />}
-
-      <input
-        ref={backRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        style={{ display: 'none' }}
-        onChange={handleBackTaken}
-      />
-      <button className="scan-submit scan-submit--vin" onClick={() => backRef.current.click()}>
-        {backPreview ? 'Retake' : 'Open Camera'}
-      </button>
-
-      {error && <p className="scan-feedback scan-feedback--error">{error}</p>}
+      {CLIENT_FIELDS.map(f => (
+        <div key={f.name} style={{ width: '100%' }}>
+          <p className="scan-label">{f.label}</p>
+          <input
+            className="scan-input client-input"
+            type={f.type}
+            name={f.name}
+            value={form[f.name]}
+            onChange={handleChange}
+            autoCapitalize={f.cap}
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </div>
+      ))}
 
       <button
         className="scan-submit scan-submit--client"
-        onClick={handleSave}
-        disabled={!backPreview}
+        onClick={() => setPhase('front')}
+        disabled={!canProceed}
+        style={{ marginTop: '0.5rem' }}
       >
-        Save Client
+        Next — Scan Licence
       </button>
     </div>
   )
