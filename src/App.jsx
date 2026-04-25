@@ -304,64 +304,23 @@ function LicenceProgress({ frontDone, backDone }) {
 }
 
 function LicenceCamera({ title, frontDone, backDone, onCapture, onBack }) {
-  const videoRef  = useRef(null)
-  const canvasRef = useRef(null)
-  const streamRef = useRef(null)
-  const [stage, setStage]       = useState('idle') // 'idle' | 'live' | 'preview'
-  const [preview, setPreview]   = useState(null)
-  const [camError, setCamError] = useState('')
+  const fileRef           = useRef(null)
+  const [preview, setPreview] = useState(null)
 
-  useEffect(() => {
-    return () => streamRef.current?.getTracks().forEach(t => t.stop())
-  }, [])
-
-  // attach stream to video element after React renders it into the DOM
-  useEffect(() => {
-    if (stage === 'live' && videoRef.current && streamRef.current) {
-      videoRef.current.srcObject = streamRef.current
-      videoRef.current.play().catch(() => {})
-    }
-  }, [stage])
-
-  async function startStream() {
-    setCamError('')
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setCamError('Camera not supported on this device.')
-      return
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 } }
-      })
-      streamRef.current = stream
-      setStage('live')
-    } catch {
-      setCamError('Camera not available — please allow camera access and try again.')
-    }
-  }
-
-  function stopStream() {
-    streamRef.current?.getTracks().forEach(t => t.stop())
-    streamRef.current = null
-  }
-
-  function capture() {
-    const video  = videoRef.current
-    const canvas = canvasRef.current
-    canvas.width  = video.videoWidth  || 1280
-    canvas.height = video.videoHeight || 720
-    canvas.getContext('2d').drawImage(video, 0, 0)
-    setPreview(canvas.toDataURL('image/jpeg', 0.85))
-    stopStream()
-    setStage('preview')
+  function handlePhotoTaken(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = ev => setPreview(ev.target.result)
+    reader.readAsDataURL(file)
   }
 
   function retake() {
     setPreview(null)
-    setStage('idle')
+    fileRef.current.value = ''
   }
 
-  if (stage === 'preview') {
+  if (preview) {
     return (
       <div className="scan-action">
         <h2 className="scan-action-title">{title}</h2>
@@ -373,32 +332,23 @@ function LicenceCamera({ title, frontDone, backDone, onCapture, onBack }) {
     )
   }
 
-  if (stage === 'live') {
-    return (
-      <div className="scan-action">
-        <button className="scan-back" onClick={() => { stopStream(); onBack() }}>← Back</button>
-        <h2 className="scan-action-title">{title}</h2>
-        <LicenceProgress frontDone={frontDone} backDone={backDone} />
-        <div className="camera-viewfinder">
-          <video ref={videoRef} autoPlay playsInline muted />
-          <div className="licence-guide" />
-          <canvas ref={canvasRef} style={{ display: 'none' }} />
-        </div>
-        <p className="vin-instruction">Align the licence inside the box</p>
-        <button className="scan-submit scan-submit--client" onClick={capture}>Capture</button>
-      </div>
-    )
-  }
-
-  // stage === 'idle'
   return (
     <div className="scan-action">
       <button className="scan-back" onClick={onBack}>← Back</button>
       <h2 className="scan-action-title">{title}</h2>
       <LicenceProgress frontDone={frontDone} backDone={backDone} />
-      {camError && <p className="scan-feedback scan-feedback--error">{camError}</p>}
-      <p className="vin-instruction">Tap below to open the camera, then align the licence in the rectangle.</p>
-      <button className="scan-submit scan-submit--client" onClick={startStream}>Open Camera</button>
+      <p className="vin-instruction">Take a photo of the licence — keep it flat and well-lit.</p>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        style={{ display: 'none' }}
+        onChange={handlePhotoTaken}
+      />
+      <button className="scan-submit scan-submit--client" onClick={() => fileRef.current.click()}>
+        Open Camera
+      </button>
     </div>
   )
 }

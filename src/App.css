@@ -371,37 +371,6 @@ body {
   font-weight: 300;
 }
 
-/* ── Licence camera ── */
-
-.camera-viewfinder {
-  position: relative;
-  width: 100%;
-  max-width: 400px;
-  background: #000;
-  border-radius: 8px;
-  overflow: hidden;
-  line-height: 0;
-}
-
-.camera-viewfinder video {
-  width: 100%;
-  display: block;
-}
-
-.licence-guide {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 80%;
-  aspect-ratio: 85.6 / 54;
-  border: 2px solid rgba(255, 255, 255, 0.85);
-  border-radius: 6px;
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
-  pointer-events: none;
-  z-index: 2;
-}
-
 /* ── Licence progress ── */
 
 .licence-progress {
