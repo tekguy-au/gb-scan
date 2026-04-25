@@ -315,6 +315,14 @@ function LicenceCamera({ title, frontDone, backDone, onCapture, onBack }) {
     return () => streamRef.current?.getTracks().forEach(t => t.stop())
   }, [])
 
+  // attach stream to video element after React renders it into the DOM
+  useEffect(() => {
+    if (stage === 'live' && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current
+      videoRef.current.play().catch(() => {})
+    }
+  }, [stage])
+
   async function startStream() {
     setCamError('')
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -327,13 +335,6 @@ function LicenceCamera({ title, frontDone, backDone, onCapture, onBack }) {
       })
       streamRef.current = stream
       setStage('live')
-      // wait for next render so videoRef is in the DOM
-      setTimeout(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
-          videoRef.current.play().catch(() => {})
-        }
-      }, 0)
     } catch {
       setCamError('Camera not available — please allow camera access and try again.')
     }
