@@ -437,6 +437,7 @@ function AddClient({ onBack }) {
   if (phase === 'front') {
     return (
       <LicenceCamera
+        key="front"
         title="Licence — Front"
         frontDone={!!frontPreview}
         backDone={!!backPreview}
@@ -449,6 +450,7 @@ function AddClient({ onBack }) {
   if (phase === 'back') {
     return (
       <LicenceCamera
+        key="back"
         title="Licence — Back"
         frontDone={!!frontPreview}
         backDone={!!backPreview}
