@@ -33,9 +33,9 @@ function Login({ onLogin }) {
     }
 
     const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('role, client_id')
-      .eq('id', authData.user.id)
+      .from('gb_user_roles')
+      .select('role')
+      .eq('user_id', authData.user.id)
       .single()
 
     if (!profile || profile.role !== 'scan') {
