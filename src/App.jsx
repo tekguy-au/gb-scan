@@ -411,7 +411,7 @@ function AddClient({ onBack }) {
       const year = now.getFullYear()
       const month = String(now.getMonth() + 1).padStart(2, '0')
       const dayOfYear = Math.ceil((now - new Date(year, 0, 0)) / 86400000)
-      const todayPrefix = `${year}-${month}-${dayOfYear}-`
+      const todayPrefix = `${year}${month}${dayOfYear}`
       const { count } = await supabase
         .from('gb_rental_clients')
         .select('*', { count: 'exact', head: true })
