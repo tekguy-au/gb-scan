@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import supabase from './supabase'
 
 const GB_SCAN_WEBHOOK    = 'https://n8n.tekguy.au/webhook/gb-vin-scan'
@@ -10,6 +10,81 @@ const SCAN_ACTIONS = [
   { key: 'check_out', label: 'Check Out Car',  mod: 'out'    },
   { key: 'add_client', label: 'Add Client',    mod: 'client' },
 ]
+
+// ── Camera viewfinder ────────────────────────────────────────────────────────
+
+function CameraViewfinder({ onCapture, color = 'vin' }) {
+  const videoRef  = useRef(null)
+  const streamRef = useRef(null)
+  const fileRef   = useRef(null)
+  const [state, setState] = useState('starting') // 'starting' | 'live' | 'fallback'
+
+  useEffect(() => {
+    let active = true
+
+    async function start() {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        if (active) setState('fallback')
+        return
+      }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } }
+        })
+        if (!active) { stream.getTracks().forEach(t => t.stop()); return }
+        streamRef.current = stream
+        videoRef.current.srcObject = stream
+        await videoRef.current.play()
+        if (active) setState('live')
+      } catch {
+        if (active) setState('fallback')
+      }
+    }
+
+    start()
+    return () => {
+      active = false
+      streamRef.current?.getTracks().forEach(t => t.stop())
+    }
+  }, [])
+
+  function capture() {
+    const video = videoRef.current
+    const canvas = document.createElement('canvas')
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+    canvas.getContext('2d').drawImage(video, 0, 0)
+    streamRef.current?.getTracks().forEach(t => t.stop())
+    onCapture(canvas.toDataURL('image/jpeg', 0.92))
+  }
+
+  function handleFile(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = ev => onCapture(ev.target.result)
+    reader.readAsDataURL(file)
+  }
+
+  if (state === 'fallback') {
+    return (
+      <>
+        <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={handleFile} />
+        <button className={`scan-submit scan-submit--${color}`} onClick={() => fileRef.current.click()}>Open Camera</button>
+      </>
+    )
+  }
+
+  return (
+    <div className="camera-viewfinder">
+      <video ref={videoRef} autoPlay playsInline muted className="camera-video" />
+      {state === 'starting' && <p className="scan-feedback">Starting camera…</p>}
+      {state === 'live' && (
+        <button className={`scan-submit scan-submit--${color}`} onClick={capture}>Capture Photo</button>
+      )}
+    </div>
+  )
+}
 
 // ── Login ────────────────────────────────────────────────────────────────────
 
@@ -90,18 +165,6 @@ function ScanNewVin({ onBack, onRecord }) {
   const [imageData, setImageData] = useState(null)
   const [rego, setRego]           = useState('')
   const [error, setError]         = useState('')
-  const fileRef                   = useRef(null)
-
-  function handlePhotoTaken(e) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = ev => {
-      setImageData(ev.target.result)
-      setPhase('rego')
-    }
-    reader.readAsDataURL(file)
-  }
 
   async function handleSubmit() {
     if (!rego.trim()) return
@@ -187,19 +250,8 @@ function ScanNewVin({ onBack, onRecord }) {
     <div className="scan-action">
       <button className="scan-back" onClick={onBack}>← Back</button>
       <h2 className="scan-action-title">Scan New VIN</h2>
-      <p className="vin-instruction">Point your camera at the VIN plate and take a photo.</p>
-
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        style={{ display: 'none' }}
-        onChange={handlePhotoTaken}
-      />
-      <button className="scan-submit scan-submit--vin" onClick={() => fileRef.current.click()}>
-        Open Camera
-      </button>
+      <p className="vin-instruction">Point at the VIN plate and capture.</p>
+      <CameraViewfinder onCapture={dataURL => { setImageData(dataURL); setPhase('rego') }} />
     </div>
   )
 }
@@ -304,21 +356,7 @@ function LicenceProgress({ frontDone, backDone }) {
 }
 
 function LicenceCamera({ title, frontDone, backDone, onCapture, onBack }) {
-  const fileRef               = useRef(null)
   const [preview, setPreview] = useState(null)
-
-  function handlePhotoTaken(e) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = ev => setPreview(ev.target.result)
-    reader.readAsDataURL(file)
-  }
-
-  function retake() {
-    setPreview(null)
-    fileRef.current.value = ''
-  }
 
   if (preview) {
     return (
@@ -326,7 +364,7 @@ function LicenceCamera({ title, frontDone, backDone, onCapture, onBack }) {
         <h2 className="scan-action-title">{title}</h2>
         <LicenceProgress frontDone={frontDone} backDone={backDone} />
         <img src={preview} alt="Captured" className="vin-preview" style={{ maxHeight: '200px' }} />
-        <button className="scan-submit scan-submit--vin" onClick={retake}>Retake</button>
+        <button className="scan-submit scan-submit--vin" onClick={() => setPreview(null)}>Retake</button>
         <button className="scan-submit scan-submit--client" onClick={() => onCapture(preview)}>Use This Photo</button>
       </div>
     )
@@ -337,18 +375,8 @@ function LicenceCamera({ title, frontDone, backDone, onCapture, onBack }) {
       <button className="scan-back" onClick={onBack}>← Back</button>
       <h2 className="scan-action-title">{title}</h2>
       <LicenceProgress frontDone={frontDone} backDone={backDone} />
-      <p className="vin-instruction">Take a photo of the licence — keep it flat and well-lit.</p>
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        style={{ display: 'none' }}
-        onChange={handlePhotoTaken}
-      />
-      <button className="scan-submit scan-submit--client" onClick={() => fileRef.current.click()}>
-        Open Camera
-      </button>
+      <p className="vin-instruction">Keep the licence flat and well-lit.</p>
+      <CameraViewfinder onCapture={dataURL => setPreview(dataURL)} color="client" />
     </div>
   )
 }

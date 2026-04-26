@@ -396,3 +396,23 @@ body {
   color: #444;
   font-size: 0.8rem;
 }
+
+/* ── Camera viewfinder ── */
+
+.camera-viewfinder {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.camera-video {
+  width: 100%;
+  border-radius: 8px;
+  background: #111;
+  aspect-ratio: 4/3;
+  object-fit: cover;
+  display: block;
+}
