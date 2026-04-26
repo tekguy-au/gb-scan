@@ -2,10 +2,10 @@ import { useState, useRef, useEffect } from 'react'
 import supabase from './supabase'
 import HOWTO_CONTENT from './howto-content.js'
 
-const GB_SCAN_WEBHOOK    = 'https://n8n.tekguy.au/webhook/gb-vin-scan'
-const GB_CHECKIN_WEBHOOK = '' // TODO: n8n webhook for check in/out
-const GB_ADD_USER_WEBHOOK = 'https://n8n.tekguy.au/webhook/gb-add-user'
-const GB_EXPORT_WEBHOOK   = 'https://n8n.tekguy.au/webhook/gb-export'
+const SVH_SCAN_WEBHOOK    = 'https://n8n.tekguy.au/webhook/svh-vin-scan'
+const SVH_CHECKIN_WEBHOOK = '' // TODO: n8n webhook for check in/out
+const SVH_ADD_USER_WEBHOOK = 'https://n8n.tekguy.au/webhook/svh-add-user'
+const SVH_EXPORT_WEBHOOK   = 'https://n8n.tekguy.au/webhook/svh-export'
 
 const STD_ACTIONS = [
   { key: 'check_in',   label: 'Check Car In',  mod: 'in'     },
@@ -107,37 +107,47 @@ function CameraViewfinder({ onCapture, color = 'vin' }) {
 // ── Login ────────────────────────────────────────────────────────────────────
 
 function Login({ onLogin }) {
-  const [email, setEmail]       = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError]       = useState('')
+  const [pins, setPins]     = useState(['', '', '', ''])
+  const [error, setError]   = useState('')
+  const [loading, setLoading] = useState(false)
+  const inputRefs = useRef([])
 
-  async function handleLogin(e) {
-    e.preventDefault()
+  useEffect(() => { inputRefs.current[0]?.focus() }, [])
+
+  async function validate(pinArr) {
+    const pin = pinArr.join('')
+    setLoading(true)
     setError('')
-
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    })
-
-    if (authError || !authData.user) {
-      setError('Invalid email or password.')
-      return
-    }
-
-    const { data: profile } = await supabase
-      .from('gb_user_roles')
-      .select('role')
-      .eq('user_id', authData.user.id)
+    const { data: staff } = await supabase
+      .from('svh_staff')
+      .select('*')
+      .eq('pin', pin)
+      .eq('app_access', true)
       .single()
 
-    if (!profile || (profile.role !== 'scan' && profile.role !== 'admin')) {
-      await supabase.auth.signOut()
-      setError('Access denied.')
+    if (!staff) {
+      setError('Invalid PIN')
+      setPins(['', '', '', ''])
+      setTimeout(() => inputRefs.current[0]?.focus(), 50)
+      setLoading(false)
       return
     }
+    onLogin({ firstname: staff.firstname, lastname: staff.lastname, app_admin: staff.app_admin })
+  }
 
-    onLogin({ email: authData.user.email, role: profile.role })
+  function handleChange(i, val) {
+    const digit = val.replace(/\D/g, '').slice(-1)
+    const next = [...pins]
+    next[i] = digit
+    setPins(next)
+    if (digit && i < 3) inputRefs.current[i + 1]?.focus()
+    if (digit && i === 3) validate(next)
+  }
+
+  function handleKeyDown(i, e) {
+    if (e.key === 'Backspace' && !pins[i] && i > 0) {
+      inputRefs.current[i - 1]?.focus()
+    }
   }
 
   return (
@@ -148,25 +158,25 @@ function Login({ onLogin }) {
         <p className="login-app-name">Fleet Control</p>
       </div>
 
-      <form className="login-box" onSubmit={handleLogin}>
-        <input
-          className="login-input"
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          autoFocus
-        />
-        <input
-          className="login-input"
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-        />
-        {error && <p className="login-error">{error}</p>}
-        <button className="login-btn" type="submit">Login</button>
-      </form>
+      <div className="pin-row">
+        {pins.map((p, i) => (
+          <input
+            key={i}
+            ref={el => inputRefs.current[i] = el}
+            className="pin-box"
+            type="tel"
+            inputMode="numeric"
+            maxLength={1}
+            value={p}
+            onChange={e => handleChange(i, e.target.value)}
+            onKeyDown={e => handleKeyDown(i, e)}
+            disabled={loading}
+          />
+        ))}
+      </div>
+
+      {error   && <p className="login-error">{error}</p>}
+      {loading && <p className="login-feedback">Checking...</p>}
 
       <div className="login-footer">
         <p className="login-powered">Online Systems &copy;2026</p>
@@ -193,12 +203,12 @@ function ScanNewVin({ onBack, onRecord }) {
       rego: rego.trim().toUpperCase(),
       image: imageData,
       timestamp: new Date().toISOString(),
-      client: 'Glenbarry Panels',
+      client: 'Suzie V Holdings',
     }
 
     try {
-      if (GB_SCAN_WEBHOOK) {
-        await fetch(GB_SCAN_WEBHOOK, {
+      if (SVH_SCAN_WEBHOOK) {
+        await fetch(SVH_SCAN_WEBHOOK, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -251,7 +261,7 @@ function ScanNewVin({ onBack, onRecord }) {
         />
 
         {error && <p className="scan-feedback scan-feedback--error">{error}</p>}
-        {!GB_SCAN_WEBHOOK && <p className="scan-feedback scan-feedback--warn">n8n webhook not yet configured</p>}
+        {!SVH_SCAN_WEBHOOK && <p className="scan-feedback scan-feedback--warn">n8n webhook not yet configured</p>}
 
         <button
           className="scan-submit scan-submit--vin"
@@ -287,11 +297,11 @@ function ScanCheckFlow({ action, onBack, recentScans, onRecord }) {
       action: action.key,
       rego: value.trim().toUpperCase(),
       timestamp: new Date().toISOString(),
-      client: 'Glenbarry Panels',
+      client: 'Suzie V Holdings',
     }
     try {
-      if (GB_CHECKIN_WEBHOOK) {
-        await fetch(GB_CHECKIN_WEBHOOK, {
+      if (SVH_CHECKIN_WEBHOOK) {
+        await fetch(SVH_CHECKIN_WEBHOOK, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -328,7 +338,7 @@ function ScanCheckFlow({ action, onBack, recentScans, onRecord }) {
       {status === 'ok'      && <p className="scan-feedback scan-feedback--ok">Recorded</p>}
       {status === 'error'   && <p className="scan-feedback scan-feedback--error">Failed — try again</p>}
       {status === 'sending' && <p className="scan-feedback">Sending...</p>}
-      {!status && !GB_CHECKIN_WEBHOOK && <p className="scan-feedback scan-feedback--warn">n8n webhook not yet configured</p>}
+      {!status && !SVH_CHECKIN_WEBHOOK && <p className="scan-feedback scan-feedback--warn">n8n webhook not yet configured</p>}
 
       <button
         className={`scan-submit scan-submit--${action.mod}`}
@@ -430,7 +440,7 @@ function AddClient({ onBack }) {
       const dayOfYear = Math.ceil((now - new Date(year, 0, 0)) / 86400000)
       const todayPrefix = `${year}${month}${dayOfYear}`
       const { count } = await supabase
-        .from('gb_rental_clients')
+        .from('svh_rental_clients')
         .select('*', { count: 'exact', head: true })
         .like('client_ref', `${todayPrefix}%`)
       const clientRef = `${todayPrefix}${(count ?? 0) + 1}`
@@ -455,7 +465,7 @@ function AddClient({ onBack }) {
       }
 
       const { error: dbErr } = await supabase
-        .from('gb_rental_clients')
+        .from('svh_rental_clients')
         .insert({
           client_ref:        clientRef,
           first_name:        form.first_name.trim(),
@@ -578,26 +588,38 @@ function AddClient({ onBack }) {
 // ── Add Staff User ────────────────────────────────────────────────────────────
 
 function AddStaffUser({ onBack }) {
-  const [email, setEmail]       = useState('')
-  const [password, setPassword] = useState('')
-  const [role, setRole]         = useState('scan')
-  const [status, setStatus]     = useState(null) // null | 'saving' | 'done' | 'error'
-  const [errMsg, setErrMsg]     = useState('')
+  const [form, setForm]     = useState({ firstname: '', lastname: '', mobile: '', pin: '' })
+  const [flags, setFlags]   = useState({ app_access: true, app_admin: false, portal_admin: false })
+  const [status, setStatus] = useState(null)
+  const [errMsg, setErrMsg] = useState('')
+
+  function handleChange(e) {
+    const { name, value } = e.target
+    setForm(prev => ({ ...prev, [name]: name === 'pin' ? value.replace(/\D/g, '').slice(0, 4) : value }))
+  }
+
+  function handleFlag(e) {
+    const { name, checked } = e.target
+    setFlags(prev => ({ ...prev, [name]: checked }))
+  }
 
   async function handleSubmit() {
-    if (!email.trim() || !password.trim()) return
+    if (!form.firstname.trim() || !form.lastname.trim() || form.pin.length !== 4) return
     setStatus('saving')
-    try {
-      const res = await fetch(GB_ADD_USER_WEBHOOK, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), password, role }),
-      })
-      if (!res.ok) throw new Error('Request failed')
-      setStatus('done')
-    } catch {
-      setErrMsg('Failed to create user — try again.')
+    const { error } = await supabase.from('svh_staff').insert({
+      firstname:    form.firstname.trim(),
+      lastname:     form.lastname.trim(),
+      mobile:       form.mobile.trim() || null,
+      pin:          form.pin,
+      app_access:   flags.app_access,
+      app_admin:    flags.app_admin,
+      portal_admin: flags.portal_admin,
+    })
+    if (error) {
+      setErrMsg(error.code === '23505' ? 'That PIN is already in use.' : 'Failed to create user — try again.')
       setStatus('error')
+    } else {
+      setStatus('done')
     }
   }
 
@@ -618,51 +640,37 @@ function AddStaffUser({ onBack }) {
     )
   }
 
+  const canSubmit = form.firstname.trim() && form.lastname.trim() && form.pin.length === 4
+
   return (
     <div className="scan-action">
       <button className="scan-back" onClick={onBack}>← Back</button>
       <h2 className="scan-action-title">Add Staff User</h2>
 
-      <p className="scan-label">Email</p>
-      <input
-        className="scan-input client-input"
-        type="email"
-        value={email}
-        onChange={e => setEmail(e.target.value)}
-        autoCapitalize="none"
-        autoComplete="off"
-        spellCheck={false}
-        placeholder="staff@example.com"
-      />
+      <p className="scan-label">First Name</p>
+      <input className="scan-input client-input" type="text" name="firstname" value={form.firstname} onChange={handleChange} autoCapitalize="words" autoComplete="off" spellCheck={false} />
 
-      <p className="scan-label">Password</p>
-      <input
-        className="scan-input client-input"
-        type="password"
-        value={password}
-        onChange={e => setPassword(e.target.value)}
-        autoComplete="new-password"
-        placeholder="Temporary password"
-      />
+      <p className="scan-label">Last Name</p>
+      <input className="scan-input client-input" type="text" name="lastname" value={form.lastname} onChange={handleChange} autoCapitalize="words" autoComplete="off" spellCheck={false} />
 
-      <p className="scan-label">Role</p>
-      <select
-        className="scan-input client-input scan-select"
-        value={role}
-        onChange={e => setRole(e.target.value)}
-      >
-        <option value="scan">Scan (Standard)</option>
-        <option value="admin">Admin</option>
-      </select>
+      <p className="scan-label">Mobile</p>
+      <input className="scan-input client-input" type="tel" name="mobile" value={form.mobile} onChange={handleChange} autoComplete="off" placeholder="Optional" />
+
+      <p className="scan-label">PIN (4 digits)</p>
+      <input className="scan-input client-input" type="tel" inputMode="numeric" name="pin" value={form.pin} onChange={handleChange} maxLength={4} placeholder="0000" />
+
+      <div className="staff-flags">
+        {[['app_access', 'App Access'], ['app_admin', 'App Admin'], ['portal_admin', 'Portal Admin']].map(([key, label]) => (
+          <label key={key} className="staff-flag-row">
+            <input type="checkbox" name={key} checked={flags[key]} onChange={handleFlag} />
+            <span>{label}</span>
+          </label>
+        ))}
+      </div>
 
       {status === 'error' && <p className="scan-feedback scan-feedback--error">{errMsg}</p>}
 
-      <button
-        className="scan-submit scan-submit--admin"
-        onClick={handleSubmit}
-        disabled={!email.trim() || !password.trim()}
-        style={{ marginTop: '0.5rem' }}
-      >
+      <button className="scan-submit scan-submit--admin" onClick={handleSubmit} disabled={!canSubmit} style={{ marginTop: '0.5rem' }}>
         Create User
       </button>
     </div>
@@ -677,7 +685,7 @@ function ExportData({ onBack }) {
   async function handleExport() {
     setStatus('sending')
     try {
-      await fetch(GB_EXPORT_WEBHOOK)
+      await fetch(SVH_EXPORT_WEBHOOK)
       setStatus('done')
     } catch {
       setStatus('error')
@@ -810,7 +818,7 @@ function ScanScreen({ user, onLogout }) {
       return <ExportData onBack={handleBack} />
     }
     if (activeAction.key === 'howto') {
-      return <HowTo onBack={handleBack} role={user.role} initialTopic={howtoInitialTopic} />
+      return <HowTo onBack={handleBack} role={user.app_admin ? 'admin' : 'std'} initialTopic={howtoInitialTopic} />
     }
     return (
       <ScanCheckFlow
@@ -827,7 +835,7 @@ function ScanScreen({ user, onLogout }) {
       <header className="scan-header">
         <span className="scan-brand">Suzie V Holdings</span>
         <div className="scan-header-user">
-          <span className="scan-client">{user.email}</span>
+          <span className="scan-client">{user.firstname} {user.lastname}</span>
           <button className="scan-logout" onClick={onLogout}>Logout</button>
         </div>
       </header>
@@ -857,7 +865,7 @@ function ScanScreen({ user, onLogout }) {
               )
             })}
 
-            {user.role === 'admin' && (
+            {user.app_admin && (
               <>
                 <p className="scan-section-title scan-section-title--admin">Admin</p>
                 {ADMIN_ACTIONS.map(a => {

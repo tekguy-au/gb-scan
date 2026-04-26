@@ -130,6 +130,74 @@ body {
   align-items: center;
 }
 
+/* ── PIN login ── */
+
+.pin-row {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.pin-box {
+  width: 3.5rem;
+  height: 3.5rem;
+  background: transparent;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-radius: 10px;
+  color: #ffffff;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 1.8rem;
+  font-weight: 300;
+  text-align: center;
+  outline: none;
+  -webkit-appearance: none;
+  caret-color: transparent;
+}
+
+.pin-box:focus {
+  border-color: rgba(255,255,255,0.75);
+}
+
+.pin-box:disabled {
+  opacity: 0.4;
+}
+
+.login-feedback {
+  color: #666;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 300;
+}
+
+/* ── Staff flags ── */
+
+.staff-flags {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 0.25rem;
+}
+
+.staff-flag-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: #aaaaaa;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 300;
+  cursor: pointer;
+}
+
+.staff-flag-row input[type="checkbox"] {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: #d4a04a;
+  cursor: pointer;
+}
+
 /* ── Scan app ── */
 
 .scan-app {
