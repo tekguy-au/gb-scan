@@ -677,11 +677,7 @@ function ExportData({ onBack }) {
   async function handleExport() {
     setStatus('sending')
     try {
-      await fetch(GB_EXPORT_WEBHOOK, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trigger: 'manual' }),
-      })
+      await fetch(GB_EXPORT_WEBHOOK)
       setStatus('done')
     } catch {
       setStatus('error')
