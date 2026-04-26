@@ -154,7 +154,7 @@ function Login({ onLogin }) {
     <div className="login-container">
       <div className="login-brand">
         <h1 className="login-heading">ClearPath<span className="login-accent">-Ai</span></h1>
-        <p className="login-tagline">Suzie V Holdings</p>
+        <p className="login-tagline">SuzieV-Holdings</p>
         <p className="login-app-name">Fleet Control</p>
       </div>
 
@@ -833,7 +833,7 @@ function ScanScreen({ user, onLogout }) {
   return (
     <div className="scan-app">
       <header className="scan-header">
-        <span className="scan-brand">Suzie V Holdings</span>
+        <span className="scan-brand">Fleet Control</span>
         <div className="scan-header-user">
           <span className="scan-client">{user.firstname} {user.lastname}</span>
           <button className="scan-logout" onClick={onLogout}>Logout</button>
