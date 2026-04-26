@@ -3,12 +3,19 @@ import supabase from './supabase'
 
 const GB_SCAN_WEBHOOK    = 'https://n8n.tekguy.au/webhook/gb-vin-scan'
 const GB_CHECKIN_WEBHOOK = '' // TODO: n8n webhook for check in/out
+const GB_ADD_USER_WEBHOOK = 'https://n8n.tekguy.au/webhook/gb-add-user'
+const GB_EXPORT_WEBHOOK   = 'https://n8n.tekguy.au/webhook/gb-export'
 
-const SCAN_ACTIONS = [
-  { key: 'new_vin',    label: 'Scan New VIN',  mod: 'vin'    },
-  { key: 'check_in',  label: 'Check In Car',   mod: 'in'     },
-  { key: 'check_out', label: 'Check Out Car',  mod: 'out'    },
-  { key: 'add_client', label: 'Add Client',    mod: 'client' },
+const STD_ACTIONS = [
+  { key: 'check_in',  label: 'Check Car In',  mod: 'in'     },
+  { key: 'check_out', label: 'Check Car Out', mod: 'out'    },
+  { key: 'add_client', label: 'Add Client',   mod: 'client' },
+]
+
+const ADMIN_ACTIONS = [
+  { key: 'new_vin',   label: 'Scan New VIN',   mod: 'vin'    },
+  { key: 'add_staff', label: 'Add Staff User', mod: 'admin'  },
+  { key: 'export',    label: 'Export Data',    mod: 'export' },
 ]
 
 // ── Camera viewfinder ────────────────────────────────────────────────────────
@@ -113,13 +120,13 @@ function Login({ onLogin }) {
       .eq('user_id', authData.user.id)
       .single()
 
-    if (!profile || profile.role !== 'scan') {
+    if (!profile || (profile.role !== 'scan' && profile.role !== 'admin')) {
       await supabase.auth.signOut()
       setError('Access denied.')
       return
     }
 
-    onLogin({ email: authData.user.email, clientName: 'Glen Barry Panels' })
+    onLogin({ email: authData.user.email, role: profile.role })
   }
 
   return (
@@ -127,7 +134,7 @@ function Login({ onLogin }) {
       <div className="login-brand">
         <h1 className="login-heading">ClearPath<span className="login-accent">-Ai</span></h1>
         <p className="login-tagline">Glen Barry Panels</p>
-        <p className="login-app-name">Fleet Management</p>
+        <p className="login-app-name">Fleet Control</p>
       </div>
 
       <form className="login-box" onSubmit={handleLogin}>
@@ -406,7 +413,6 @@ function AddClient({ onBack }) {
     setPhase('saving')
     const licNo = form.licence_number.trim().toUpperCase()
     try {
-      // Generate client_ref at save time: YYYY-MM-DDD-N
       const now = new Date()
       const year = now.getFullYear()
       const month = String(now.getMonth() + 1).padStart(2, '0')
@@ -558,6 +564,144 @@ function AddClient({ onBack }) {
   )
 }
 
+// ── Add Staff User ────────────────────────────────────────────────────────────
+
+function AddStaffUser({ onBack }) {
+  const [email, setEmail]       = useState('')
+  const [password, setPassword] = useState('')
+  const [role, setRole]         = useState('scan')
+  const [status, setStatus]     = useState(null) // null | 'saving' | 'done' | 'error'
+  const [errMsg, setErrMsg]     = useState('')
+
+  async function handleSubmit() {
+    if (!email.trim() || !password.trim()) return
+    setStatus('saving')
+    try {
+      const res = await fetch(GB_ADD_USER_WEBHOOK, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), password, role }),
+      })
+      if (!res.ok) throw new Error('Request failed')
+      setStatus('done')
+    } catch {
+      setErrMsg('Failed to create user — try again.')
+      setStatus('error')
+    }
+  }
+
+  if (status === 'done') {
+    return (
+      <div className="scan-action">
+        <p className="scan-feedback scan-feedback--ok" style={{ fontSize: '1.1rem', marginTop: '2rem' }}>User created</p>
+        <button className="scan-submit scan-submit--vin" style={{ marginTop: '1.5rem' }} onClick={onBack}>Done</button>
+      </div>
+    )
+  }
+
+  if (status === 'saving') {
+    return (
+      <div className="scan-action">
+        <p className="scan-feedback" style={{ marginTop: '2rem' }}>Creating user...</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="scan-action">
+      <button className="scan-back" onClick={onBack}>← Back</button>
+      <h2 className="scan-action-title">Add Staff User</h2>
+
+      <p className="scan-label">Email</p>
+      <input
+        className="scan-input client-input"
+        type="email"
+        value={email}
+        onChange={e => setEmail(e.target.value)}
+        autoCapitalize="none"
+        autoComplete="off"
+        spellCheck={false}
+        placeholder="staff@example.com"
+      />
+
+      <p className="scan-label">Password</p>
+      <input
+        className="scan-input client-input"
+        type="password"
+        value={password}
+        onChange={e => setPassword(e.target.value)}
+        autoComplete="new-password"
+        placeholder="Temporary password"
+      />
+
+      <p className="scan-label">Role</p>
+      <select
+        className="scan-input client-input scan-select"
+        value={role}
+        onChange={e => setRole(e.target.value)}
+      >
+        <option value="scan">Scan (Standard)</option>
+        <option value="admin">Admin</option>
+      </select>
+
+      {status === 'error' && <p className="scan-feedback scan-feedback--error">{errMsg}</p>}
+
+      <button
+        className="scan-submit scan-submit--admin"
+        onClick={handleSubmit}
+        disabled={!email.trim() || !password.trim()}
+        style={{ marginTop: '0.5rem' }}
+      >
+        Create User
+      </button>
+    </div>
+  )
+}
+
+// ── Export Data ───────────────────────────────────────────────────────────────
+
+function ExportData({ onBack }) {
+  const [status, setStatus] = useState(null) // null | 'sending' | 'done' | 'error'
+
+  async function handleExport() {
+    setStatus('sending')
+    try {
+      await fetch(GB_EXPORT_WEBHOOK, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trigger: 'manual' }),
+      })
+      setStatus('done')
+    } catch {
+      setStatus('error')
+    }
+  }
+
+  return (
+    <div className="scan-action">
+      <button className="scan-back" onClick={onBack}>← Back</button>
+      <h2 className="scan-action-title">Export Data</h2>
+      <p className="vin-instruction" style={{ marginBottom: '1rem' }}>
+        Exports all client records as a CSV to support@progresstech.au.
+        Also runs automatically every Sunday at 9pm.
+      </p>
+
+      {status === 'done'    && <p className="scan-feedback scan-feedback--ok">Export sent</p>}
+      {status === 'error'   && <p className="scan-feedback scan-feedback--error">Export failed — try again</p>}
+      {status === 'sending' && <p className="scan-feedback">Sending...</p>}
+
+      <button
+        className="scan-submit scan-submit--export"
+        onClick={handleExport}
+        disabled={status === 'sending' || status === 'done'}
+        style={{ marginTop: '0.5rem' }}
+      >
+        Export Now
+      </button>
+    </div>
+  )
+}
+
 // ── Scan screen ──────────────────────────────────────────────────────────────
 
 function ScanScreen({ user, onLogout }) {
@@ -576,6 +720,12 @@ function ScanScreen({ user, onLogout }) {
     if (activeAction.key === 'add_client') {
       return <AddClient onBack={() => setActiveAction(null)} />
     }
+    if (activeAction.key === 'add_staff') {
+      return <AddStaffUser onBack={() => setActiveAction(null)} />
+    }
+    if (activeAction.key === 'export') {
+      return <ExportData onBack={() => setActiveAction(null)} />
+    }
     return (
       <ScanCheckFlow
         action={activeAction}
@@ -590,14 +740,17 @@ function ScanScreen({ user, onLogout }) {
     <div className="scan-app">
       <header className="scan-header">
         <span className="scan-brand">Glen Barry Panels</span>
-        <span className="scan-client">{user.email}</span>
-        <button className="scan-logout" onClick={onLogout}>Logout</button>
+        <div className="scan-header-user">
+          <span className="scan-client">{user.email}</span>
+          <button className="scan-logout" onClick={onLogout}>Logout</button>
+        </div>
       </header>
 
       <main className="scan-main">
         {activeAction ? renderAction() : (
           <div className="scan-home">
-            {SCAN_ACTIONS.map(a => (
+            <p className="scan-section-title">Tasks</p>
+            {STD_ACTIONS.map(a => (
               <button
                 key={a.key}
                 className={`scan-action-btn scan-action-btn--${a.mod}`}
@@ -606,6 +759,21 @@ function ScanScreen({ user, onLogout }) {
                 {a.label}
               </button>
             ))}
+
+            {user.role === 'admin' && (
+              <>
+                <p className="scan-section-title scan-section-title--admin">Admin</p>
+                {ADMIN_ACTIONS.map(a => (
+                  <button
+                    key={a.key}
+                    className={`scan-action-btn scan-action-btn--${a.mod}`}
+                    onClick={() => setActiveAction(a)}
+                  >
+                    {a.label}
+                  </button>
+                ))}
+              </>
+            )}
           </div>
         )}
       </main>
