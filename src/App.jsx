@@ -303,33 +303,32 @@ function LicenceProgress({ frontDone, backDone }) {
   )
 }
 
-// CameraView — video element always in DOM so useEffect ref is guaranteed set
-function CameraView({ camKey, onCapture, onFallback }) {
+// CameraView — video always in DOM; camera starts only on direct user tap (iOS requirement)
+function CameraView({ onCapture, onFallback }) {
   const videoRef  = useRef(null)
   const canvasRef = useRef(null)
-  const [ready, setReady] = useState(false)
+  const [status, setStatus] = useState('idle') // 'idle' | 'starting' | 'live'
 
   useEffect(() => {
-    let active = true
-    if (!navigator.mediaDevices?.getUserMedia) { onFallback(); return }
-
-    navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 } }
-    })
-      .then(stream => {
-        if (!active) { stream.getTracks().forEach(t => t.stop()); return }
-        videoRef.current.srcObject = stream
-        return videoRef.current.play()
-      })
-      .then(() => { if (active) setReady(true) })
-      .catch(() => { if (active) onFallback() })
-
     return () => {
-      active = false
-      const src = videoRef.current?.srcObject
-      if (src) src.getTracks().forEach(t => t.stop())
+      videoRef.current?.srcObject?.getTracks().forEach(t => t.stop())
     }
-  }, [camKey])
+  }, [])
+
+  async function startCamera() {
+    setStatus('starting')
+    if (!navigator.mediaDevices?.getUserMedia) { onFallback(); return }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 } }
+      })
+      videoRef.current.srcObject = stream
+      await videoRef.current.play()
+      setStatus('live')
+    } catch {
+      onFallback()
+    }
+  }
 
   function capture() {
     const video  = videoRef.current
@@ -337,21 +336,24 @@ function CameraView({ camKey, onCapture, onFallback }) {
     canvas.width  = video.videoWidth
     canvas.height = video.videoHeight
     canvas.getContext('2d').drawImage(video, 0, 0)
-    const src = video.srcObject
-    if (src) src.getTracks().forEach(t => t.stop())
+    video.srcObject?.getTracks().forEach(t => t.stop())
     onCapture(canvas.toDataURL('image/jpeg', 0.85))
   }
 
   return (
-    <div className="camera-viewfinder">
-      <video ref={videoRef} autoPlay playsInline muted />
-      {ready && <div className="licence-guide" />}
-      {!ready && <p className="camera-starting">Starting camera…</p>}
-      <canvas ref={canvasRef} style={{ display: 'none' }} />
-      <button className="camera-capture-btn" onClick={capture} disabled={!ready}>
-        Capture
-      </button>
-    </div>
+    <>
+      {/* video stays in DOM so ref is always valid before startCamera is called */}
+      <div className="camera-viewfinder" style={{ display: status === 'idle' ? 'none' : undefined }}>
+        <video ref={videoRef} autoPlay playsInline muted />
+        {status === 'live'     && <div className="licence-guide" />}
+        {status === 'starting' && <p className="camera-starting">Starting camera…</p>}
+        <canvas ref={canvasRef} style={{ display: 'none' }} />
+      </div>
+
+      {status === 'idle'     && <button className="scan-submit scan-submit--client" onClick={startCamera}>Open Camera</button>}
+      {status === 'starting' && <button className="scan-submit scan-submit--client" disabled>Starting…</button>}
+      {status === 'live'     && <button className="camera-capture-btn" onClick={capture}>Capture</button>}
+    </>
   )
 }
 
@@ -412,7 +414,6 @@ function LicenceCamera({ title, frontDone, backDone, onCapture, onBack }) {
           {portrait && <p className="scan-feedback scan-feedback--warn">Rotate to landscape for a better photo</p>}
           <CameraView
             key={camKey}
-            camKey={camKey}
             onCapture={handleCapture}
             onFallback={() => setStage('fallback')}
           />
