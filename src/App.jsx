@@ -16,7 +16,7 @@ const STD_ACTIONS = [
 
 const ADMIN_ACTIONS = [
   { key: 'new_vin',   label: 'Scan New VIN',   mod: 'admin'  },
-  { key: 'add_staff', label: 'Add Staff User', mod: 'admin'  },
+  { key: 'add_staff', label: 'Add / Update User', mod: 'admin'  },
   { key: 'export',    label: 'Export Data',    mod: 'export' },
 ]
 
@@ -585,13 +585,39 @@ function AddClient({ onBack }) {
   )
 }
 
-// ── Add Staff User ────────────────────────────────────────────────────────────
+// ── Add / Update Staff User ───────────────────────────────────────────────────
 
 function AddStaffUser({ onBack }) {
-  const [form, setForm]     = useState({ firstname: '', lastname: '', mobile: '', pin: '' })
+  const [phase, setPhase]   = useState('search') // 'search' | 'form' | 'saving' | 'done'
+  const [mobile, setMobile] = useState('')
+  const [mode, setMode]     = useState('create') // 'create' | 'update'
+  const [existingId, setExistingId] = useState(null)
+  const [form, setForm]     = useState({ firstname: '', lastname: '', pin: '' })
   const [flags, setFlags]   = useState({ app_access: true, app_admin: false, portal_admin: false })
-  const [status, setStatus] = useState(null)
   const [errMsg, setErrMsg] = useState('')
+
+  async function handleSearch() {
+    if (!mobile.trim()) return
+    setErrMsg('')
+    const { data } = await supabase
+      .from('svh_staff')
+      .select('*')
+      .eq('mobile', mobile.trim())
+      .single()
+
+    if (data) {
+      setExistingId(data.id)
+      setForm({ firstname: data.firstname, lastname: data.lastname, pin: data.pin })
+      setFlags({ app_access: data.app_access, app_admin: data.app_admin, portal_admin: data.portal_admin })
+      setMode('update')
+    } else {
+      setExistingId(null)
+      setForm({ firstname: '', lastname: '', pin: '' })
+      setFlags({ app_access: true, app_admin: false, portal_admin: false })
+      setMode('create')
+    }
+    setPhase('form')
+  }
 
   function handleChange(e) {
     const { name, value } = e.target
@@ -605,37 +631,66 @@ function AddStaffUser({ onBack }) {
 
   async function handleSubmit() {
     if (!form.firstname.trim() || !form.lastname.trim() || form.pin.length !== 4) return
-    setStatus('saving')
-    const { error } = await supabase.from('svh_staff').insert({
+    setPhase('saving')
+    const payload = {
       firstname:    form.firstname.trim(),
       lastname:     form.lastname.trim(),
-      mobile:       form.mobile.trim() || null,
+      mobile:       mobile.trim(),
       pin:          form.pin,
       app_access:   flags.app_access,
       app_admin:    flags.app_admin,
       portal_admin: flags.portal_admin,
-    })
+    }
+    const { error } = mode === 'update'
+      ? await supabase.from('svh_staff').update(payload).eq('id', existingId)
+      : await supabase.from('svh_staff').insert(payload)
+
     if (error) {
-      setErrMsg(error.code === '23505' ? 'That PIN is already in use.' : 'Failed to create user — try again.')
-      setStatus('error')
+      setErrMsg(error.code === '23505' ? 'That PIN is already in use.' : 'Failed to save — try again.')
+      setPhase('form')
     } else {
-      setStatus('done')
+      setPhase('done')
     }
   }
 
-  if (status === 'done') {
+  if (phase === 'done') {
     return (
       <div className="scan-action">
-        <p className="scan-feedback scan-feedback--ok" style={{ fontSize: '1.1rem', marginTop: '2rem' }}>User created</p>
+        <p className="scan-feedback scan-feedback--ok" style={{ fontSize: '1.1rem', marginTop: '2rem' }}>
+          {mode === 'update' ? 'User updated' : 'User created'}
+        </p>
         <button className="scan-submit scan-submit--vin" style={{ marginTop: '1.5rem' }} onClick={onBack}>Done</button>
       </div>
     )
   }
 
-  if (status === 'saving') {
+  if (phase === 'saving') {
     return (
       <div className="scan-action">
-        <p className="scan-feedback" style={{ marginTop: '2rem' }}>Creating user...</p>
+        <p className="scan-feedback" style={{ marginTop: '2rem' }}>Saving...</p>
+      </div>
+    )
+  }
+
+  if (phase === 'search') {
+    return (
+      <div className="scan-action">
+        <button className="scan-back" onClick={onBack}>← Back</button>
+        <h2 className="scan-action-title">Add / Update User</h2>
+        <p className="scan-label">Mobile Number</p>
+        <input
+          className="scan-input client-input"
+          type="tel"
+          value={mobile}
+          onChange={e => setMobile(e.target.value)}
+          autoComplete="off"
+          placeholder="04xx xxx xxx"
+          autoFocus
+        />
+        {errMsg && <p className="scan-feedback scan-feedback--error">{errMsg}</p>}
+        <button className="scan-submit scan-submit--admin" onClick={handleSearch} disabled={!mobile.trim()} style={{ marginTop: '0.5rem' }}>
+          Find / New
+        </button>
       </div>
     )
   }
@@ -644,17 +699,17 @@ function AddStaffUser({ onBack }) {
 
   return (
     <div className="scan-action">
-      <button className="scan-back" onClick={onBack}>← Back</button>
-      <h2 className="scan-action-title">Add Staff User</h2>
+      <button className="scan-back" onClick={() => setPhase('search')}>← Back</button>
+      <h2 className="scan-action-title">{mode === 'update' ? 'Update User' : 'New User'}</h2>
+
+      <p className="scan-label">Mobile</p>
+      <input className="scan-input client-input" type="tel" value={mobile} disabled style={{ opacity: 0.5 }} />
 
       <p className="scan-label">First Name</p>
       <input className="scan-input client-input" type="text" name="firstname" value={form.firstname} onChange={handleChange} autoCapitalize="words" autoComplete="off" spellCheck={false} />
 
       <p className="scan-label">Last Name</p>
       <input className="scan-input client-input" type="text" name="lastname" value={form.lastname} onChange={handleChange} autoCapitalize="words" autoComplete="off" spellCheck={false} />
-
-      <p className="scan-label">Mobile</p>
-      <input className="scan-input client-input" type="tel" name="mobile" value={form.mobile} onChange={handleChange} autoComplete="off" placeholder="Optional" />
 
       <p className="scan-label">PIN (4 digits)</p>
       <input className="scan-input client-input" type="tel" inputMode="numeric" name="pin" value={form.pin} onChange={handleChange} maxLength={4} placeholder="0000" />
@@ -668,10 +723,10 @@ function AddStaffUser({ onBack }) {
         ))}
       </div>
 
-      {status === 'error' && <p className="scan-feedback scan-feedback--error">{errMsg}</p>}
+      {errMsg && <p className="scan-feedback scan-feedback--error">{errMsg}</p>}
 
       <button className="scan-submit scan-submit--admin" onClick={handleSubmit} disabled={!canSubmit} style={{ marginTop: '0.5rem' }}>
-        Create User
+        {mode === 'update' ? 'Update User' : 'Create User'}
       </button>
     </div>
   )
