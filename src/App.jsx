@@ -13,7 +13,7 @@ const STD_ACTIONS = [
 ]
 
 const ADMIN_ACTIONS = [
-  { key: 'new_vin',   label: 'Scan New VIN',   mod: 'vin'    },
+  { key: 'new_vin',   label: 'Scan New VIN',   mod: 'admin'  },
   { key: 'add_staff', label: 'Add Staff User', mod: 'admin'  },
   { key: 'export',    label: 'Export Data',    mod: 'export' },
 ]
