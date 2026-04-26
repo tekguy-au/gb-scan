@@ -303,95 +303,24 @@ function LicenceProgress({ frontDone, backDone }) {
   )
 }
 
-// CameraView — video always in DOM; camera starts only on direct user tap (iOS requirement)
-function CameraView({ onCapture, onFallback }) {
-  const videoRef  = useRef(null)
-  const canvasRef = useRef(null)
-  const [status, setStatus] = useState('idle') // 'idle' | 'starting' | 'live'
-
-  useEffect(() => {
-    return () => {
-      videoRef.current?.srcObject?.getTracks().forEach(t => t.stop())
-    }
-  }, [])
-
-  async function startCamera() {
-    setStatus('starting')
-    if (!navigator.mediaDevices?.getUserMedia) { onFallback(); return }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 } }
-      })
-      videoRef.current.srcObject = stream
-      await videoRef.current.play()
-      setStatus('live')
-    } catch {
-      onFallback()
-    }
-  }
-
-  function capture() {
-    const video  = videoRef.current
-    const canvas = canvasRef.current
-    canvas.width  = video.videoWidth
-    canvas.height = video.videoHeight
-    canvas.getContext('2d').drawImage(video, 0, 0)
-    video.srcObject?.getTracks().forEach(t => t.stop())
-    onCapture(canvas.toDataURL('image/jpeg', 0.85))
-  }
-
-  return (
-    <>
-      {/* video stays in DOM so ref is always valid before startCamera is called */}
-      <div className="camera-viewfinder" style={{ display: status === 'idle' ? 'none' : undefined }}>
-        <video ref={videoRef} autoPlay playsInline muted />
-        {status === 'live'     && <div className="licence-guide" />}
-        {status === 'starting' && <p className="camera-starting">Starting camera…</p>}
-        <canvas ref={canvasRef} style={{ display: 'none' }} />
-      </div>
-
-      {status === 'idle'     && <button className="scan-submit scan-submit--client" onClick={startCamera}>Open Camera</button>}
-      {status === 'starting' && <button className="scan-submit scan-submit--client" disabled>Starting…</button>}
-      {status === 'live'     && <button className="camera-capture-btn" onClick={capture}>Capture</button>}
-    </>
-  )
-}
-
 function LicenceCamera({ title, frontDone, backDone, onCapture, onBack }) {
   const fileRef               = useRef(null)
-  const [stage, setStage]     = useState('live')   // 'live' | 'fallback' | 'preview'
-  const [camKey, setCamKey]   = useState(0)
   const [preview, setPreview] = useState(null)
-  const [portrait, setPortrait] = useState(() => window.innerHeight > window.innerWidth)
 
-  useEffect(() => {
-    const mq = window.matchMedia('(orientation: portrait)')
-    const check = e => setPortrait(e.matches)
-    mq.addEventListener('change', check)
-    return () => mq.removeEventListener('change', check)
-  }, [])
-
-  function handleCapture(dataURL) {
-    setPreview(dataURL)
-    setStage('preview')
-  }
-
-  function handleFileCapture(e) {
+  function handlePhotoTaken(e) {
     const file = e.target.files?.[0]
     if (!file) return
     const reader = new FileReader()
-    reader.onload = ev => { setPreview(ev.target.result); setStage('preview') }
+    reader.onload = ev => setPreview(ev.target.result)
     reader.readAsDataURL(file)
   }
 
   function retake() {
     setPreview(null)
-    setCamKey(k => k + 1)
-    setStage('live')
-    if (fileRef.current) fileRef.current.value = ''
+    fileRef.current.value = ''
   }
 
-  if (stage === 'preview') {
+  if (preview) {
     return (
       <div className="scan-action">
         <h2 className="scan-action-title">{title}</h2>
@@ -408,34 +337,18 @@ function LicenceCamera({ title, frontDone, backDone, onCapture, onBack }) {
       <button className="scan-back" onClick={onBack}>← Back</button>
       <h2 className="scan-action-title">{title}</h2>
       <LicenceProgress frontDone={frontDone} backDone={backDone} />
-
-      {stage === 'live' && (
-        <>
-          {portrait && <p className="scan-feedback scan-feedback--warn">Rotate to landscape for a better photo</p>}
-          <CameraView
-            key={camKey}
-            onCapture={handleCapture}
-            onFallback={() => setStage('fallback')}
-          />
-        </>
-      )}
-
-      {stage === 'fallback' && (
-        <>
-          <p className="vin-instruction">Take a photo of the licence — keep it flat and well-lit.</p>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            style={{ display: 'none' }}
-            onChange={handleFileCapture}
-          />
-          <button className="scan-submit scan-submit--client" onClick={() => fileRef.current.click()}>
-            Open Camera
-          </button>
-        </>
-      )}
+      <p className="vin-instruction">Take a photo of the licence — keep it flat and well-lit.</p>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        style={{ display: 'none' }}
+        onChange={handlePhotoTaken}
+      />
+      <button className="scan-submit scan-submit--client" onClick={() => fileRef.current.click()}>
+        Open Camera
+      </button>
     </div>
   )
 }
