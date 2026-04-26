@@ -406,28 +406,41 @@ function AddClient({ onBack }) {
     setPhase('saving')
     const licNo = form.licence_number.trim().toUpperCase()
     try {
+      // Generate client_ref at save time: YYYY-MM-DDD-N
+      const now = new Date()
+      const year = now.getFullYear()
+      const month = String(now.getMonth() + 1).padStart(2, '0')
+      const dayOfYear = Math.ceil((now - new Date(year, 0, 0)) / 86400000)
+      const todayPrefix = `${year}-${month}-${dayOfYear}-`
+      const { count } = await supabase
+        .from('gb_rental_clients')
+        .select('*', { count: 'exact', head: true })
+        .like('client_ref', `${todayPrefix}%`)
+      const clientRef = `${todayPrefix}${(count ?? 0) + 1}`
+
       let frontPath = null
       let backPath  = null
 
       if (frontPreview) {
         const { error: upErr } = await supabase.storage
           .from('licence-images')
-          .upload(`${licNo}/front.jpg`, dataURLtoBlob(frontPreview), { upsert: true, contentType: 'image/jpeg' })
+          .upload(`${clientRef}/front.jpg`, dataURLtoBlob(frontPreview), { upsert: true, contentType: 'image/jpeg' })
         if (upErr) throw upErr
-        frontPath = `${licNo}/front.jpg`
+        frontPath = `${clientRef}/front.jpg`
       }
 
       if (backPreview) {
         const { error: upErr } = await supabase.storage
           .from('licence-images')
-          .upload(`${licNo}/back.jpg`, dataURLtoBlob(backPreview), { upsert: true, contentType: 'image/jpeg' })
+          .upload(`${clientRef}/back.jpg`, dataURLtoBlob(backPreview), { upsert: true, contentType: 'image/jpeg' })
         if (upErr) throw upErr
-        backPath = `${licNo}/back.jpg`
+        backPath = `${clientRef}/back.jpg`
       }
 
       const { error: dbErr } = await supabase
         .from('gb_rental_clients')
         .insert({
+          client_ref:        clientRef,
           first_name:        form.first_name.trim(),
           last_name:         form.last_name.trim(),
           date_of_birth:     form.date_of_birth || null,
