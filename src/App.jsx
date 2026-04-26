@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import supabase from './supabase'
+import HOWTO_CONTENT from './howto-content.js'
 
 const GB_SCAN_WEBHOOK    = 'https://n8n.tekguy.au/webhook/gb-vin-scan'
 const GB_CHECKIN_WEBHOOK = '' // TODO: n8n webhook for check in/out
@@ -16,6 +17,7 @@ const ADMIN_ACTIONS = [
   { key: 'new_vin',   label: 'Scan New VIN',   mod: 'admin'  },
   { key: 'add_staff', label: 'Add Staff User', mod: 'admin'  },
   { key: 'export',    label: 'Export Data',    mod: 'export' },
+  { key: 'howto',     label: 'How To',         mod: 'howto'  },
 ]
 
 // ── Camera viewfinder ────────────────────────────────────────────────────────
@@ -702,6 +704,63 @@ function ExportData({ onBack }) {
   )
 }
 
+// ── How To ───────────────────────────────────────────────────────────────────
+
+const HOWTO_TOPICS = [
+  { key: 'check-car-in',   label: 'Check Car In'   },
+  { key: 'check-car-out',  label: 'Check Car Out'  },
+  { key: 'add-client',     label: 'Add Client'     },
+  { key: 'scan-new-vin',   label: 'Scan New VIN'   },
+  { key: 'add-staff-user', label: 'Add Staff User' },
+  { key: 'export-data',    label: 'Export Data'    },
+]
+
+function renderMarkdown(text) {
+  return text.split('\n').map((line, i) => {
+    if (line.startsWith('## ')) return <p key={i} className="howto-h2">{line.slice(3)}</p>
+    if (line.startsWith('# '))  return null // title already shown as page heading
+    if (line.startsWith('- ') || line.match(/^\d+\. /)) {
+      const content = line.replace(/^\d+\.\s*/, '').replace(/^-\s*/, '')
+      return <p key={i} className="howto-li">{parseBold(content)}</p>
+    }
+    if (line.trim() === '') return <div key={i} className="howto-gap" />
+    return <p key={i} className="howto-p">{parseBold(line)}</p>
+  })
+}
+
+function parseBold(text) {
+  const parts = text.split(/\*\*(.*?)\*\*/)
+  return parts.map((part, i) => i % 2 === 1 ? <strong key={i}>{part}</strong> : part)
+}
+
+function HowTo({ onBack }) {
+  const [selected, setSelected] = useState(null)
+
+  if (selected) {
+    const content = HOWTO_CONTENT[selected.key] || 'No instructions found.'
+    return (
+      <div className="scan-action howto-detail">
+        <button className="scan-back" onClick={() => setSelected(null)}>← Back</button>
+        <h2 className="scan-action-title">{selected.label}</h2>
+        <div className="howto-body">{renderMarkdown(content)}</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="scan-action">
+      <button className="scan-back" onClick={onBack}>← Back</button>
+      <h2 className="scan-action-title">How To</h2>
+      <p className="howto-intro">Select a function for step-by-step instructions.</p>
+      {HOWTO_TOPICS.map(t => (
+        <button key={t.key} className="howto-topic-btn" onClick={() => setSelected(t)}>
+          {t.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 // ── Scan screen ──────────────────────────────────────────────────────────────
 
 function ScanScreen({ user, onLogout }) {
@@ -725,6 +784,9 @@ function ScanScreen({ user, onLogout }) {
     }
     if (activeAction.key === 'export') {
       return <ExportData onBack={() => setActiveAction(null)} />
+    }
+    if (activeAction.key === 'howto') {
+      return <HowTo onBack={() => setActiveAction(null)} />
     }
     return (
       <ScanCheckFlow

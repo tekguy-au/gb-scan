@@ -431,6 +431,87 @@ body {
   font-size: 0.8rem;
 }
 
+/* ── How To ── */
+
+.scan-action-btn--howto { background: rgba(255,255,255,0.06); color: #aaaaaa; border: 1px solid rgba(255,255,255,0.12); }
+
+.howto-intro {
+  color: #666;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 300;
+  align-self: flex-start;
+  margin-bottom: 0.25rem;
+}
+
+.howto-topic-btn {
+  width: 100%;
+  background: #2e3032;
+  border: 1px solid #3a3c3e;
+  border-radius: 10px;
+  color: #cccccc;
+  cursor: pointer;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 1rem;
+  font-weight: 400;
+  letter-spacing: 0.03em;
+  padding: 0.9em 1em;
+  text-align: left;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.howto-topic-btn:active { transform: scale(0.98); }
+
+.howto-detail {
+  align-items: flex-start;
+}
+
+.howto-body {
+  width: 100%;
+  padding-top: 0.5rem;
+}
+
+.howto-h2 {
+  color: #d4a04a;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-top: 1.25rem;
+  margin-bottom: 0.4rem;
+}
+
+.howto-p {
+  color: #bbbbbb;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 300;
+  line-height: 1.6;
+  margin-bottom: 0.25rem;
+}
+
+.howto-li {
+  color: #bbbbbb;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 300;
+  line-height: 1.6;
+  padding-left: 1.1em;
+  position: relative;
+  margin-bottom: 0.2rem;
+}
+
+.howto-li::before {
+  content: '–';
+  position: absolute;
+  left: 0;
+  color: #555;
+}
+
+.howto-gap { height: 0.4rem; }
+
 /* ── Camera viewfinder ── */
 
 .camera-viewfinder {
