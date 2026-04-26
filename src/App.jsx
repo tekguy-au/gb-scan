@@ -8,17 +8,26 @@ const GB_ADD_USER_WEBHOOK = 'https://n8n.tekguy.au/webhook/gb-add-user'
 const GB_EXPORT_WEBHOOK   = 'https://n8n.tekguy.au/webhook/gb-export'
 
 const STD_ACTIONS = [
-  { key: 'check_in',  label: 'Check Car In',  mod: 'in'     },
-  { key: 'check_out', label: 'Check Car Out', mod: 'out'    },
-  { key: 'add_client', label: 'Add Client',   mod: 'client' },
+  { key: 'check_in',   label: 'Check Car In',  mod: 'in'     },
+  { key: 'check_out',  label: 'Check Car Out', mod: 'out'    },
+  { key: 'add_client', label: 'Add Client',    mod: 'client' },
+  { key: 'howto',      label: 'How To',        mod: 'howto'  },
 ]
 
 const ADMIN_ACTIONS = [
   { key: 'new_vin',   label: 'Scan New VIN',   mod: 'admin'  },
   { key: 'add_staff', label: 'Add Staff User', mod: 'admin'  },
   { key: 'export',    label: 'Export Data',    mod: 'export' },
-  { key: 'howto',     label: 'How To',         mod: 'howto'  },
 ]
+
+const ACTION_HOWTO_KEY = {
+  check_in:   'check-car-in',
+  check_out:  'check-car-out',
+  add_client: 'add-client',
+  new_vin:    'scan-new-vin',
+  add_staff:  'add-staff-user',
+  export:     'export-data',
+}
 
 // ── Camera viewfinder ────────────────────────────────────────────────────────
 
@@ -715,6 +724,8 @@ const HOWTO_TOPICS = [
   { key: 'export-data',    label: 'Export Data'    },
 ]
 
+const STD_HOWTO_KEYS = new Set(['check-car-in', 'check-car-out', 'add-client'])
+
 function renderMarkdown(text) {
   return text.split('\n').map((line, i) => {
     if (line.startsWith('## ')) return <p key={i} className="howto-h2">{line.slice(3)}</p>
@@ -733,8 +744,13 @@ function parseBold(text) {
   return parts.map((part, i) => i % 2 === 1 ? <strong key={i}>{part}</strong> : part)
 }
 
-function HowTo({ onBack }) {
-  const [selected, setSelected] = useState(null)
+function HowTo({ onBack, role, initialTopic }) {
+  const [selected, setSelected] = useState(
+    initialTopic ? HOWTO_TOPICS.find(t => t.key === initialTopic) ?? null : null
+  )
+  const topics = role === 'admin'
+    ? HOWTO_TOPICS
+    : HOWTO_TOPICS.filter(t => STD_HOWTO_KEYS.has(t.key))
 
   if (selected) {
     const content = HOWTO_CONTENT[selected.key] || 'No instructions found.'
@@ -752,7 +768,7 @@ function HowTo({ onBack }) {
       <button className="scan-back" onClick={onBack}>← Back</button>
       <h2 className="scan-action-title">How To</h2>
       <p className="howto-intro">Select a function for step-by-step instructions.</p>
-      {HOWTO_TOPICS.map(t => (
+      {topics.map(t => (
         <button key={t.key} className="howto-topic-btn" onClick={() => setSelected(t)}>
           {t.label}
         </button>
@@ -764,34 +780,46 @@ function HowTo({ onBack }) {
 // ── Scan screen ──────────────────────────────────────────────────────────────
 
 function ScanScreen({ user, onLogout }) {
-  const [activeAction, setActiveAction] = useState(null)
-  const [recentScans, setRecentScans]   = useState([])
+  const [activeAction, setActiveAction]         = useState(null)
+  const [howtoInitialTopic, setHowtoInitialTopic] = useState(null)
+  const [recentScans, setRecentScans]           = useState([])
 
   function handleRecord(entry) {
     setRecentScans(prev => [entry, ...prev].slice(0, 30))
   }
 
+  function handleInfoTap(e, howtoKey) {
+    e.stopPropagation()
+    setHowtoInitialTopic(howtoKey)
+    setActiveAction({ key: 'howto', label: 'How To', mod: 'howto' })
+  }
+
+  function handleBack() {
+    setActiveAction(null)
+    setHowtoInitialTopic(null)
+  }
+
   function renderAction() {
     if (!activeAction) return null
     if (activeAction.key === 'new_vin') {
-      return <ScanNewVin onBack={() => setActiveAction(null)} onRecord={handleRecord} />
+      return <ScanNewVin onBack={handleBack} onRecord={handleRecord} />
     }
     if (activeAction.key === 'add_client') {
-      return <AddClient onBack={() => setActiveAction(null)} />
+      return <AddClient onBack={handleBack} />
     }
     if (activeAction.key === 'add_staff') {
-      return <AddStaffUser onBack={() => setActiveAction(null)} />
+      return <AddStaffUser onBack={handleBack} />
     }
     if (activeAction.key === 'export') {
-      return <ExportData onBack={() => setActiveAction(null)} />
+      return <ExportData onBack={handleBack} />
     }
     if (activeAction.key === 'howto') {
-      return <HowTo onBack={() => setActiveAction(null)} />
+      return <HowTo onBack={handleBack} role={user.role} initialTopic={howtoInitialTopic} />
     }
     return (
       <ScanCheckFlow
         action={activeAction}
-        onBack={() => setActiveAction(null)}
+        onBack={handleBack}
         recentScans={recentScans}
         onRecord={handleRecord}
       />
@@ -812,28 +840,50 @@ function ScanScreen({ user, onLogout }) {
         {activeAction ? renderAction() : (
           <div className="scan-home">
             <p className="scan-section-title">Tasks</p>
-            {STD_ACTIONS.map(a => (
-              <button
-                key={a.key}
-                className={`scan-action-btn scan-action-btn--${a.mod}`}
-                onClick={() => setActiveAction(a)}
-              >
-                {a.label}
-              </button>
-            ))}
+            {STD_ACTIONS.map(a => {
+              const howtoKey = ACTION_HOWTO_KEY[a.key]
+              return (
+                <button
+                  key={a.key}
+                  className={`scan-action-btn scan-action-btn--${a.mod}`}
+                  onClick={() => setActiveAction(a)}
+                >
+                  <span className="action-btn-label">{a.label}</span>
+                  {howtoKey && (
+                    <span
+                      className="action-btn-info"
+                      onClick={e => handleInfoTap(e, howtoKey)}
+                      role="button"
+                      aria-label={`How to use ${a.label}`}
+                    >i</span>
+                  )}
+                </button>
+              )
+            })}
 
             {user.role === 'admin' && (
               <>
                 <p className="scan-section-title scan-section-title--admin">Admin</p>
-                {ADMIN_ACTIONS.map(a => (
-                  <button
-                    key={a.key}
-                    className={`scan-action-btn scan-action-btn--${a.mod}`}
-                    onClick={() => setActiveAction(a)}
-                  >
-                    {a.label}
-                  </button>
-                ))}
+                {ADMIN_ACTIONS.map(a => {
+                  const howtoKey = ACTION_HOWTO_KEY[a.key]
+                  return (
+                    <button
+                      key={a.key}
+                      className={`scan-action-btn scan-action-btn--${a.mod}`}
+                      onClick={() => setActiveAction(a)}
+                    >
+                      <span className="action-btn-label">{a.label}</span>
+                      {howtoKey && (
+                        <span
+                          className="action-btn-info"
+                          onClick={e => handleInfoTap(e, howtoKey)}
+                          role="button"
+                          aria-label={`How to use ${a.label}`}
+                        >i</span>
+                      )}
+                    </button>
+                  )
+                })}
               </>
             )}
           </div>
