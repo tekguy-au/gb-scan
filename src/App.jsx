@@ -954,8 +954,30 @@ function ScanScreen({ user, onLogout }) {
 
 // ── App root ─────────────────────────────────────────────────────────────────
 
+function DesktopBlock() {
+  return (
+    <div style={{
+      minHeight: '100vh', display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      background: '#1a1c1e', color: '#fff', textAlign: 'center', padding: '2rem'
+    }}>
+      <h1 style={{ fontSize: '1.5rem', marginBottom: '0.75rem' }}>
+        ClearPath<span style={{ color: '#6399d2' }}>-Ai</span>
+      </h1>
+      <p style={{ color: '#aaa', maxWidth: '320px', lineHeight: 1.6 }}>
+        Fleet Control is designed for mobile devices only.<br />
+        Please open this app on your smartphone.
+      </p>
+    </div>
+  )
+}
+
 export default function App() {
   const [user, setUser] = useState(null)
+
+  if (window.innerWidth >= 768) {
+    return <DesktopBlock />
+  }
 
   if (!user) {
     return <Login onLogin={setUser} />
