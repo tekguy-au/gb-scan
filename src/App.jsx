@@ -286,37 +286,136 @@ function ScanNewVin({ onBack, onRecord }) {
 
 // ── Check In / Check Out flow ────────────────────────────────────────────────
 
-function ScanCheckFlow({ action, onBack, recentScans, onRecord }) {
-  const [value, setValue]   = useState('')
-  const [status, setStatus] = useState(null)
+function ScanCheckFlow({ action, user, onBack, recentScans, onRecord }) {
+  const [phase, setPhase]       = useState('rego') // 'rego' | 'odo' | 'saving' | 'done' | 'error'
+  const [rego, setRego]         = useState('')
+  const [odometer, setOdometer] = useState('')
+  const [errMsg, setErrMsg]     = useState('')
 
-  async function handleSubmit() {
-    if (!value.trim()) return
-    setStatus('sending')
-    const payload = {
-      action: action.key,
-      rego: value.trim().toUpperCase(),
-      timestamp: new Date().toISOString(),
-      client: 'Suzie V Holdings',
-    }
+  async function handleSave() {
+    if (!rego.trim() || !odometer.trim()) return
+    setPhase('saving')
+
     try {
-      if (SVH_CHECKIN_WEBHOOK) {
-        await fetch(SVH_CHECKIN_WEBHOOK, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
+      const regoUpper = rego.trim().toUpperCase()
+      const odoInt    = parseInt(odometer.trim(), 10)
+      const recordedBy = `${user.firstname} ${user.lastname}`
+
+      const { data: vehicles } = await supabase
+        .from('svh_vehicles')
+        .select('id')
+        .eq('rego', regoUpper)
+        .limit(1)
+
+      if (!vehicles?.length) throw new Error('Vehicle not found — check rego.')
+      const vehicleId = vehicles[0].id
+
+      if (action.key === 'check_out') {
+        const { error: mvErr } = await supabase.from('car_movements').insert({
+          vehicle_id:     vehicleId,
+          checked_out_at: new Date().toISOString(),
+          odometer_out:   odoInt,
+          recorded_by:    recordedBy,
         })
+        if (mvErr) throw mvErr
+        await supabase.from('svh_vehicles').update({ status: 'out' }).eq('id', vehicleId)
+      } else {
+        const { data: openMovements } = await supabase
+          .from('car_movements')
+          .select('id')
+          .eq('vehicle_id', vehicleId)
+          .is('checked_in_at', null)
+          .order('checked_out_at', { ascending: false })
+          .limit(1)
+
+        if (!openMovements?.length) throw new Error('No open checkout found for this vehicle.')
+
+        const { error: updErr } = await supabase.from('car_movements').update({
+          checked_in_at: new Date().toISOString(),
+          odometer_in:   odoInt,
+          recorded_by:   recordedBy,
+        }).eq('id', openMovements[0].id)
+        if (updErr) throw updErr
+        await supabase.from('svh_vehicles').update({ status: 'in' }).eq('id', vehicleId)
       }
-      onRecord({ action: action.key, value: payload.rego, id: Date.now(), timestamp: payload.timestamp })
-      setStatus('ok')
-      setValue('')
-      setTimeout(() => setStatus(null), 2000)
-    } catch {
-      setStatus('error')
-      setTimeout(() => setStatus(null), 3000)
+
+      onRecord({ action: action.key, value: regoUpper, id: Date.now(), timestamp: new Date().toISOString() })
+      setPhase('done')
+    } catch (err) {
+      setErrMsg(err.message || 'Failed — try again.')
+      setPhase('error')
     }
   }
 
+  if (phase === 'saving') {
+    return (
+      <div className="scan-action">
+        <p className="scan-feedback" style={{ marginTop: '2rem' }}>Saving...</p>
+      </div>
+    )
+  }
+
+  if (phase === 'done') {
+    return (
+      <div className="scan-action">
+        <p className="scan-feedback scan-feedback--ok" style={{ fontSize: '1.1rem', marginTop: '2rem' }}>Recorded</p>
+        <button
+          className={`scan-submit scan-submit--${action.mod}`}
+          style={{ marginTop: '1.5rem' }}
+          onClick={() => { setRego(''); setOdometer(''); setPhase('rego') }}
+        >
+          Next vehicle
+        </button>
+        <button className="scan-submit scan-submit--vin" style={{ marginTop: '0.5rem' }} onClick={onBack}>Done</button>
+      </div>
+    )
+  }
+
+  if (phase === 'error') {
+    return (
+      <div className="scan-action">
+        <button className="scan-back" onClick={() => { setErrMsg(''); setPhase('rego') }}>← Back</button>
+        <p className="scan-feedback scan-feedback--error" style={{ marginTop: '2rem' }}>{errMsg}</p>
+        <button
+          className={`scan-submit scan-submit--${action.mod}`}
+          style={{ marginTop: '1.5rem' }}
+          onClick={() => { setErrMsg(''); setPhase('rego') }}
+        >
+          Try again
+        </button>
+      </div>
+    )
+  }
+
+  if (phase === 'odo') {
+    return (
+      <div className="scan-action">
+        <button className="scan-back" onClick={() => setPhase('rego')}>← Back</button>
+        <h2 className="scan-action-title">{action.label}</h2>
+
+        <p className="scan-label">Odometer (km)</p>
+        <input
+          className="scan-input"
+          type="tel"
+          inputMode="numeric"
+          placeholder="000000"
+          value={odometer}
+          onChange={e => setOdometer(e.target.value.replace(/\D/g, '').slice(0, 6))}
+          autoFocus
+        />
+
+        <button
+          className={`scan-submit scan-submit--${action.mod}`}
+          onClick={handleSave}
+          disabled={!odometer.trim()}
+        >
+          Confirm
+        </button>
+      </div>
+    )
+  }
+
+  // phase === 'rego'
   return (
     <div className="scan-action">
       <button className="scan-back" onClick={onBack}>← Back</button>
@@ -327,25 +426,20 @@ function ScanCheckFlow({ action, onBack, recentScans, onRecord }) {
         className="scan-input"
         type="text"
         placeholder="e.g. ABC123"
-        value={value}
-        onChange={e => setValue(e.target.value.toUpperCase())}
+        value={rego}
+        onChange={e => setRego(e.target.value.toUpperCase())}
         autoCapitalize="characters"
         autoComplete="off"
         spellCheck={false}
         autoFocus
       />
 
-      {status === 'ok'      && <p className="scan-feedback scan-feedback--ok">Recorded</p>}
-      {status === 'error'   && <p className="scan-feedback scan-feedback--error">Failed — try again</p>}
-      {status === 'sending' && <p className="scan-feedback">Sending...</p>}
-      {!status && !SVH_CHECKIN_WEBHOOK && <p className="scan-feedback scan-feedback--warn">n8n webhook not yet configured</p>}
-
       <button
         className={`scan-submit scan-submit--${action.mod}`}
-        onClick={handleSubmit}
-        disabled={!value.trim() || status === 'sending'}
+        onClick={() => setPhase('odo')}
+        disabled={!rego.trim()}
       >
-        Confirm
+        Next
       </button>
 
       {recentScans.filter(s => s.action === action.key).slice(0, 5).map(s => (
@@ -417,7 +511,7 @@ const CLIENT_FIELDS = [
   { name: 'licence_number',  label: 'Licence Number',      type: 'text',     cap: 'characters' },
 ]
 
-function AddClient({ onBack }) {
+function AddClient({ onBack, user }) {
   const [phase, setPhase]               = useState('form') // 'form' | 'front' | 'back' | 'confirm' | 'saving' | 'done'
   const [form, setForm]                 = useState({ first_name: '', last_name: '', date_of_birth: '', address: '', licence_number: '' })
   const [frontPreview, setFrontPreview] = useState(null)
@@ -475,6 +569,7 @@ function AddClient({ onBack }) {
           licence_number:    licNo,
           licence_front_url: frontPath,
           licence_back_url:  backPath,
+          recorded_by:       `${user.firstname} ${user.lastname}`,
         })
 
       if (dbErr) throw dbErr
@@ -864,7 +959,7 @@ function ScanScreen({ user, onLogout }) {
       return <ScanNewVin onBack={handleBack} onRecord={handleRecord} />
     }
     if (activeAction.key === 'add_client') {
-      return <AddClient onBack={handleBack} />
+      return <AddClient onBack={handleBack} user={user} />
     }
     if (activeAction.key === 'add_staff') {
       return <AddStaffUser onBack={handleBack} />
@@ -878,6 +973,7 @@ function ScanScreen({ user, onLogout }) {
     return (
       <ScanCheckFlow
         action={activeAction}
+        user={user}
         onBack={handleBack}
         recentScans={recentScans}
         onRecord={handleRecord}
