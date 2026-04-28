@@ -3,7 +3,6 @@ import supabase from './supabase'
 import HOWTO_CONTENT from './howto-content.js'
 
 const SVH_SCAN_WEBHOOK    = 'https://n8n.tekguy.au/webhook/svh-vin-scan'
-const SVH_CHECKIN_WEBHOOK = '' // TODO: n8n webhook for check in/out
 const SVH_ADD_USER_WEBHOOK = 'https://n8n.tekguy.au/webhook/svh-add-user'
 const SVH_EXPORT_WEBHOOK   = 'https://n8n.tekguy.au/webhook/svh-export'
 
