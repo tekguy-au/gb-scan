@@ -505,6 +505,7 @@ function LicenceCamera({ title, frontDone, backDone, onCapture, onBack }) {
 const CLIENT_FIELDS = [
   { name: 'first_name',      label: 'First Name',          type: 'text',     cap: 'words'      },
   { name: 'last_name',       label: 'Last Name',           type: 'text',     cap: 'words'      },
+  { name: 'alias',           label: 'Alias / Known As',    type: 'text',     cap: 'words'      },
   { name: 'date_of_birth',   label: 'Date of Birth',       type: 'date',     cap: 'none'       },
   { name: 'address',         label: 'Address',             type: 'text',     cap: 'sentences'  },
   { name: 'licence_number',  label: 'Licence Number',      type: 'text',     cap: 'characters' },
@@ -512,7 +513,7 @@ const CLIENT_FIELDS = [
 
 function AddClient({ onBack, user }) {
   const [phase, setPhase]               = useState('form') // 'form' | 'front' | 'back' | 'confirm' | 'saving' | 'done'
-  const [form, setForm]                 = useState({ first_name: '', last_name: '', date_of_birth: '', address: '', licence_number: '' })
+  const [form, setForm]                 = useState({ first_name: '', last_name: '', alias: '', date_of_birth: '', address: '', licence_number: '' })
   const [frontPreview, setFrontPreview] = useState(null)
   const [backPreview, setBackPreview]   = useState(null)
   const [error, setError]               = useState('')
@@ -563,6 +564,7 @@ function AddClient({ onBack, user }) {
           client_ref:        clientRef,
           first_name:        form.first_name.trim(),
           last_name:         form.last_name.trim(),
+          alias:             form.alias.trim() || null,
           date_of_birth:     form.date_of_birth || null,
           address:           form.address.trim(),
           licence_number:    licNo,
