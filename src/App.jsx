@@ -207,12 +207,19 @@ function ScanNewVin({ onBack, onRecord }) {
     }
 
     try {
+      let result = null
       if (SVH_SCAN_WEBHOOK) {
-        await fetch(SVH_SCAN_WEBHOOK, {
+        const res = await fetch(SVH_SCAN_WEBHOOK, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         })
+        result = await res.json().catch(() => null)
+      }
+      if (result && result.success === false) {
+        setError(result.error || 'Could not read VIN — try a clearer photo.')
+        setPhase('type')
+        return
       }
       onRecord({ action: 'new_vin', value: rego.trim().toUpperCase(), id: Date.now(), timestamp: payload.timestamp })
       setPhase('done')
