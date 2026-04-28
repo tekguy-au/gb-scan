@@ -188,19 +188,20 @@ function Login({ onLogin }) {
 // ── Scan New VIN flow ────────────────────────────────────────────────────────
 
 function ScanNewVin({ onBack, onRecord }) {
-  const [phase, setPhase]         = useState('photo') // 'photo' | 'rego' | 'saving' | 'done'
-  const [imageData, setImageData] = useState(null)
-  const [rego, setRego]           = useState('')
-  const [error, setError]         = useState('')
+  const [phase, setPhase]             = useState('photo') // 'photo' | 'rego' | 'type' | 'saving' | 'done'
+  const [imageData, setImageData]     = useState(null)
+  const [rego, setRego]               = useState('')
+  const [isClientVehicle, setIsClientVehicle] = useState(null)
+  const [error, setError]             = useState('')
 
-  async function handleSubmit() {
-    if (!rego.trim()) return
+  async function handleSubmit(clientVehicle) {
     setPhase('saving')
 
     const payload = {
       action: 'new_vin',
       rego: rego.trim().toUpperCase(),
       image: imageData,
+      is_client_vehicle: clientVehicle,
       timestamp: new Date().toISOString(),
       client: 'Suzie V Holdings',
     }
@@ -217,7 +218,7 @@ function ScanNewVin({ onBack, onRecord }) {
       setPhase('done')
     } catch {
       setError('Failed to send — check connection and try again.')
-      setPhase('rego')
+      setPhase('type')
     }
   }
 
@@ -234,6 +235,32 @@ function ScanNewVin({ onBack, onRecord }) {
     return (
       <div className="scan-action">
         <p className="scan-feedback" style={{ marginTop: '2rem' }}>Saving...</p>
+      </div>
+    )
+  }
+
+  if (phase === 'type') {
+    return (
+      <div className="scan-action">
+        <button className="scan-back" onClick={() => setPhase('rego')}>← Back</button>
+        <h2 className="scan-action-title">Vehicle Type</h2>
+        <p className="scan-label" style={{ marginBottom: '1.5rem' }}>Is this a client vehicle or a business asset?</p>
+
+        {error && <p className="scan-feedback scan-feedback--error">{error}</p>}
+
+        <button
+          className="scan-submit scan-submit--vin"
+          style={{ marginBottom: '1rem' }}
+          onClick={() => handleSubmit(true)}
+        >
+          Client's Vehicle
+        </button>
+        <button
+          className="scan-submit scan-submit--out"
+          onClick={() => handleSubmit(false)}
+        >
+          Business Asset
+        </button>
       </div>
     )
   }
@@ -259,15 +286,14 @@ function ScanNewVin({ onBack, onRecord }) {
           autoFocus
         />
 
-        {error && <p className="scan-feedback scan-feedback--error">{error}</p>}
         {!SVH_SCAN_WEBHOOK && <p className="scan-feedback scan-feedback--warn">n8n webhook not yet configured</p>}
 
         <button
           className="scan-submit scan-submit--vin"
-          onClick={handleSubmit}
+          onClick={() => { if (rego.trim()) setPhase('type') }}
           disabled={!rego.trim()}
         >
-          Save Vehicle
+          Next
         </button>
       </div>
     )
